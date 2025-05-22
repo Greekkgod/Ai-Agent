@@ -1,10 +1,11 @@
 from dotenv import load_dotenv
 from pydantic import BaseModel
 from langchain_anthropic import ChatAnthropic
-from langchain_openai from ChatOpenAI
+from langchain_openai import ChatOpenAI
 from langchain_core.prompts import ChatPromptTemplate
-from langchain_core.output_parsers import pydanticOutputParser
-fron langchain.agents import create_tool_calling_agent, AgentExecutor
+from langchain_core.output_parsers import PydanticOutputParser
+from langchain.agents import create_tool_calling_agent, AgentExecutor
+from tools import search_tool
 
 load_dotenv()
 class ResearchResponse(BaseModel):
@@ -16,7 +17,7 @@ class ResearchResponse(BaseModel):
     tools_used: list[str]
 
 llm = ChatAnthropic(model ="claude-3-5-sonnet-20241022")
-parser = pydanticOutputParser(pydantic_object=ResearchResponse)
+parser = PydanticOutputParser(pydantic_object=ResearchResponse)
 prompt = ChatPromptTemplate.from_messages(
     [
         (
@@ -28,15 +29,23 @@ prompt = ChatPromptTemplate.from_messages(
             """,
         ),
         ("placeholder", "{chat_history}"),
-        ("human", "{query}{name}"),
+        ("human", "{query}"),
         ("placeholder", "{agent_scratchpad}"),
     ]
 ).partial(format_instructions=parser.get_format_instructions())
-
+tools = [search_tool]
 agent = create_tool_calling_agent(
     llm=llm,
     prompt=prompt,
-    tools=[],
+    tools=tools,
 )
-agent_executor = AgentExecutor(agent=agent, verbose=True , tools=[])
-raw_response = agent_executor.invoke({})
+agent_executor = AgentExecutor(agent=agent, verbose=True , tools=tools)
+query = input("What can i help you reserach today?")
+raw_response = agent_executor.invoke({"query": query})
+print(raw_response)
+
+try:
+    structured_response = parser.parse(raw_response["output"][0]["text"])
+    print(structured_response)
+except Exception as e:
+    print("Error parsing response", e, "Raw Response - ", raw_response)
